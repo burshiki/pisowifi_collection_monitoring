@@ -566,17 +566,62 @@ export default function AuditCollectionsPage({ vendos, filters }: PageProps) {
                   Previous
                 </Button>
                 <div className="flex items-center gap-1">
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                    <Button
-                      key={page}
-                      variant={currentPage === page ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => goToPage(page)}
-                      className="w-8"
-                    >
-                      {page}
-                    </Button>
-                  ))}
+                  {(() => {
+                    const current = currentPage;
+                    const last = totalPages;
+                    const pages: (number | string)[] = [];
+                    
+                    if (last <= 7) {
+                      // Show all pages if 7 or fewer
+                      for (let i = 1; i <= last; i++) {
+                        pages.push(i);
+                      }
+                    } else {
+                      // Always show first page
+                      pages.push(1);
+                      
+                      // Show ellipsis and/or pages around current
+                      if (current > 3) {
+                        pages.push('...');
+                      }
+                      
+                      // Show pages around current
+                      for (let i = Math.max(2, current - 1); i <= Math.min(last - 1, current + 1); i++) {
+                        pages.push(i);
+                      }
+                      
+                      // Show ellipsis before last page if needed
+                      if (current < last - 2) {
+                        pages.push('...');
+                      }
+                      
+                      // Always show last page
+                      pages.push(last);
+                    }
+                    
+                    return pages.map((page, index) => {
+                      if (page === '...') {
+                        return (
+                          <span key={`ellipsis-${index}`} className="px-2 text-muted-foreground">
+                            ...
+                          </span>
+                        );
+                      }
+                      
+                      const pageNumber = page as number;
+                      return (
+                        <Button
+                          key={pageNumber}
+                          variant={currentPage === pageNumber ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => goToPage(pageNumber)}
+                          className="w-8"
+                        >
+                          {pageNumber}
+                        </Button>
+                      );
+                    });
+                  })()}
                 </div>
                 <Button
                   variant="outline"

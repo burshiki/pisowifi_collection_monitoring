@@ -253,23 +253,62 @@ export function VendoDataTable({ vendos, filters, collectionDate }: VendoDataTab
               </Button>
               
               <div className="flex items-center gap-1">
-                {vendos.links.slice(1, -1).map((link, index) => {
-                  const isNumber = !isNaN(Number(link.label));
-                  if (!isNumber) return null;
+                {(() => {
+                  const current = vendos.current_page;
+                  const last = vendos.last_page;
+                  const pages: (number | string)[] = [];
                   
-                  const pageNumber = Number(link.label);
-                  return (
-                    <Button
-                      key={index}
-                      variant={link.active ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => router.get('/wifi-vendos', { page: pageNumber, search: filters?.search, status: filters?.status }, { preserveScroll: true, preserveState: true })}
-                      className="h-9 w-9 p-0"
-                    >
-                      {link.label}
-                    </Button>
-                  );
-                })}
+                  if (last <= 7) {
+                    // Show all pages if 7 or fewer
+                    for (let i = 1; i <= last; i++) {
+                      pages.push(i);
+                    }
+                  } else {
+                    // Always show first page
+                    pages.push(1);
+                    
+                    // Show ellipsis and/or pages around current
+                    if (current > 3) {
+                      pages.push('...');
+                    }
+                    
+                    // Show pages around current
+                    for (let i = Math.max(2, current - 1); i <= Math.min(last - 1, current + 1); i++) {
+                      pages.push(i);
+                    }
+                    
+                    // Show ellipsis before last page if needed
+                    if (current < last - 2) {
+                      pages.push('...');
+                    }
+                    
+                    // Always show last page
+                    pages.push(last);
+                  }
+                  
+                  return pages.map((page, index) => {
+                    if (page === '...') {
+                      return (
+                        <span key={`ellipsis-${index}`} className="px-2 text-muted-foreground">
+                          ...
+                        </span>
+                      );
+                    }
+                    
+                    const pageNumber = page as number;
+                    return (
+                      <Button
+                        key={pageNumber}
+                        variant={vendos.current_page === pageNumber ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => router.get('/wifi-vendos', { page: pageNumber, search: filters?.search, status: filters?.status }, { preserveScroll: true, preserveState: true })}
+                        className="h-9 w-9 p-0"
+                      >
+                        {pageNumber}
+                      </Button>
+                    );
+                  });
+                })()}
               </div>
 
               <Button
