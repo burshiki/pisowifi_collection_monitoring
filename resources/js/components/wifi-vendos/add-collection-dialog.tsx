@@ -91,6 +91,7 @@ export function AddCollectionDialog({ vendo, open, onOpenChange }: AddCollection
       [currentMonthKey]: {
         amount: numAmount,
         remarks: remarks || null,
+        collected_at: new Date().toISOString(),
       },
     };
 
@@ -235,6 +236,7 @@ export function AddCollectionDialog({ vendo, open, onOpenChange }: AddCollection
                     const isObject = typeof collectionData === 'object';
                     const collectionAmount = isObject ? collectionData.amount : collectionData;
                     const collectionRemarks = isObject ? collectionData.remarks : null;
+                    const collectedAtDate = isObject ? collectionData.collected_at : null;
 
                     return (
                       <Card key={monthKey} className="p-4">
@@ -251,6 +253,17 @@ export function AddCollectionDialog({ vendo, open, onOpenChange }: AddCollection
                             {collectionRemarks && (
                               <p className="text-sm text-muted-foreground italic">
                                 {collectionRemarks}
+                              </p>
+                            )}
+                            {collectedAtDate && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Collected: {new Date(collectedAtDate).toLocaleString('en-US', {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}
                               </p>
                             )}
                           </div>

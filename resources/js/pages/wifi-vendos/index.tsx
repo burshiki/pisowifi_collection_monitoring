@@ -1,5 +1,5 @@
 import { Head, router, usePage } from '@inertiajs/react';
-import { Plus, Search, X } from 'lucide-react';
+import { Plus, Search, X, Calendar } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,6 +34,7 @@ export default function WifiVendosPage({ vendos, filters }: PageProps) {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [search, setSearch] = useState(filters.search || '');
   const [status, setStatus] = useState(filters.status || 'all');
+  const [collectionDate, setCollectionDate] = useState('');
 
   const canCreate = auth.permissions?.includes('create wifi vendos');
 
@@ -55,6 +56,10 @@ export default function WifiVendosPage({ vendos, filters }: PageProps) {
 
   const handleClearSearch = () => {
     setSearch('');
+  };
+
+  const handleClearDate = () => {
+    setCollectionDate('');
   };
 
   return (
@@ -98,6 +103,25 @@ export default function WifiVendosPage({ vendos, filters }: PageProps) {
                 <SelectItem value="new">New Vendo</SelectItem>
               </SelectContent>
             </Select>
+            {/* Collection Date Filter */}
+            <div className="relative">
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10 pointer-events-none" />
+              <Input
+                type="date"
+                value={collectionDate}
+                onChange={(e) => setCollectionDate(e.target.value)}
+                className="pl-9 pr-9 w-full sm:w-52"
+              />
+              {collectionDate && (
+                <button
+                  type="button"
+                  onClick={handleClearDate}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground z-10"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
           </div>
           {/* Add Button */}
           {canCreate && (
@@ -108,7 +132,7 @@ export default function WifiVendosPage({ vendos, filters }: PageProps) {
           )}
         </div>
 
-        <VendoDataTable vendos={vendos} filters={filters} />
+        <VendoDataTable vendos={vendos} filters={filters} collectionDate={collectionDate} />
 
         <CreateVendoDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} />
       </div>

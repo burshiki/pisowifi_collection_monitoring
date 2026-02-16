@@ -1,6 +1,7 @@
 export interface MonthlyCollection {
   amount: number;
   remarks: string | null;
+  collected_at?: string;
   confirmed_amount?: number;
   confirmed_by?: number;
   confirmed_at?: string;

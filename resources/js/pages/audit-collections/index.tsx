@@ -1,11 +1,19 @@
-import { Head, usePage } from '@inertiajs/react';
-import { CheckCircle2, History, Printer } from 'lucide-react';
-import { useState } from 'react';
+import { Head, router, usePage } from '@inertiajs/react';
+import { CheckCircle2, History, Printer, Search, X, Calendar } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { ConfirmCollectionDialog } from '@/components/audit/confirm-collection-dialog';
 import { ViewHistoryDialog } from '@/components/audit/view-history-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import AppLayout from '@/layouts/app-layout';
 import type { BreadcrumbItem } from '@/types';
 import type { Auth } from '@/types/auth';
@@ -13,13 +21,18 @@ import type { WifiVendo } from '@/types/wifi-vendo';
 
 interface PageProps {
   vendos: WifiVendo[];
+  filters: {
+    search?: string;
+    status?: string;
+    confirmation_date?: string;
+  };
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
   { title: 'Audit Collections', href: '#' },
 ];
 
-export default function AuditCollectionsPage({ vendos }: PageProps) {
+export default function AuditCollectionsPage({ vendos, filters }: PageProps) {
   const { auth } = usePage<{ auth: Auth }>().props;
   const [selectedVendo, setSelectedVendo] = useState<WifiVendo | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<string>('');
@@ -28,8 +41,47 @@ export default function AuditCollectionsPage({ vendos }: PageProps) {
   const [historyVendo, setHistoryVendo] = useState<WifiVendo | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 10;
+  
+  // Filter states
+  const [search, setSearch] = useState(filters.search || '');
+  const [status, setStatus] = useState(filters.status || 'all');
+  const [confirmationDate, setConfirmationDate] = useState(filters.confirmation_date || '');
 
   const canConfirmCollection = auth.permissions?.includes('view audit collections');
+  
+  // Debounced search and filter (only send search and status to server)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      router.get(
+        '/audit-collections',
+        {
+          search: search || undefined,
+          status: status !== 'all' ? status : undefined,
+        },
+        {
+          preserveState: true,
+          preserveScroll: true,
+          replace: true,
+        }
+      );
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [search, status]);
+  
+  const handleClearSearch = () => {
+    setSearch('');
+  };
+  
+  const handleClearDate = () => {
+    setConfirmationDate('');
+    setCurrentPage(1);
+  };
+
+  const handleDateChange = (value: string) => {
+    setConfirmationDate(value);
+    setCurrentPage(1);
+  };
 
   const getCurrentMonth = () => {
     const now = new Date();
@@ -56,7 +108,9 @@ export default function AuditCollectionsPage({ vendos }: PageProps) {
     const monthData = vendo.monthly_collections?.[currentMonth];
     const currentCollection = typeof monthData === 'object' ? monthData?.amount : monthData;
     const collectionRemarks = typeof monthData === 'object' ? monthData?.remarks : null;
+    const collectedAt = typeof monthData === 'object' ? monthData?.collected_at : null;
     const confirmedAmount = typeof monthData === 'object' ? monthData?.confirmed_amount : null;
+    const confirmedAt = typeof monthData === 'object' ? monthData?.confirmed_at : null;
     const discrepancy = typeof monthData === 'object' ? monthData?.discrepancy : null;
     const isConfirmed = confirmedAmount !== null && confirmedAmount !== undefined;
     
@@ -75,12 +129,30 @@ export default function AuditCollectionsPage({ vendos }: PageProps) {
       ...vendo,
       currentCollection,
       collectionRemarks,
+      collectedAt,
       confirmedAmount,
+      confirmedAt,
       discrepancy,
       isConfirmed,
       allCollections,
       hasCurrentCollection: currentCollection && currentCollection > 0,
     };
+  }).filter((vendo) => {
+    // Filter by confirmation date on the frontend (uses browser timezone, consistent with displayed dates)
+    if (!confirmationDate) return true;
+    if (!vendo.confirmedAt) return false;
+    const confirmedLocal = new Date(vendo.confirmedAt);
+    const year = confirmedLocal.getFullYear();
+    const month = String(confirmedLocal.getMonth() + 1).padStart(2, '0');
+    const day = String(confirmedLocal.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}` === confirmationDate;
+  }).sort((a, b) => {
+    // Sort by collection date in ascending order
+    // Collections with no date go to the end
+    if (!a.collectedAt && !b.collectedAt) return 0;
+    if (!a.collectedAt) return 1;
+    if (!b.collectedAt) return -1;
+    return new Date(a.collectedAt).getTime() - new Date(b.collectedAt).getTime();
   });
 
   const collectedVendos = vendoCollections.filter(v => v.hasCurrentCollection);
@@ -181,6 +253,7 @@ export default function AuditCollectionsPage({ vendos }: PageProps) {
                 <th>Vendo Name</th>
                 <th class="amount">Reported</th>
                 <th class="amount">Confirmed</th>
+                <th>Confirmed At</th>
                 <th class="amount">Discrepancy</th>
               </tr>
             </thead>
@@ -190,13 +263,20 @@ export default function AuditCollectionsPage({ vendos }: PageProps) {
                   <td>${vendo.name}</td>
                   <td class="amount">₱${vendo.currentCollection?.toLocaleString() || '0'}</td>
                   <td class="amount">₱${vendo.confirmedAmount?.toLocaleString() || '0'}</td>
+                  <td>${vendo.confirmedAt ? new Date(vendo.confirmedAt).toLocaleString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  }) : '-'}</td>
                   <td class="amount" style="color: ${vendo.discrepancy === 0 ? 'green' : 'red'}">
                     ${vendo.discrepancy === 0 ? '₱0' : '₱' + Math.abs(vendo.discrepancy || 0).toLocaleString()}
                   </td>
                 </tr>
               `).join('')}
               <tr class="total-row">
-                <td colspan="2">TOTAL CONFIRMED COLLECTIONS</td>
+                <td colspan="3">TOTAL CONFIRMED COLLECTIONS</td>
                 <td class="amount">₱${totalConfirmedAmount.toLocaleString()}</td>
                 <td class="amount" style="color: red">₱${totalDiscrepancy.toLocaleString()}</td>
               </tr>
@@ -251,6 +331,64 @@ export default function AuditCollectionsPage({ vendos }: PageProps) {
             </Button>
           )}
         </div>
+        
+        {/* Search and Filters */}
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+          {/* Search Box */}
+          <div className="relative flex-1 lg:max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search vendo by name..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 pr-9"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={handleClearSearch}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          
+          {/* Status Filter */}
+          <Select value={status} onValueChange={setStatus}>
+            <SelectTrigger className="w-full lg:w-50">
+              <SelectValue placeholder="Filter by status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="confirmed">Confirmed</SelectItem>
+              <SelectItem value="pending">Pending Audit</SelectItem>
+              <SelectItem value="not-collected">Not Collected</SelectItem>
+            </SelectContent>
+          </Select>
+          
+          {/* Date Filter */}
+          <div className="relative">
+            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10 pointer-events-none" />
+            <Input
+              type="date"
+              placeholder="Filter by confirmation date"
+              value={confirmationDate}
+              onChange={(e) => handleDateChange(e.target.value)}
+              className="pl-9 pr-9 w-full lg:w-55"
+            />
+            {confirmationDate && (
+              <button
+                type="button"
+                onClick={handleClearDate}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground z-10"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -289,6 +427,7 @@ export default function AuditCollectionsPage({ vendos }: PageProps) {
                   <th className="px-6 py-3 text-left text-sm font-medium">Vendo Name</th>
                   <th className="px-6 py-3 text-left text-sm font-medium">Reported</th>
                   <th className="px-6 py-3 text-left text-sm font-medium">Confirmed</th>
+                  <th className="px-6 py-3 text-left text-sm font-medium">Confirmed At</th>
                   <th className="px-6 py-3 text-left text-sm font-medium">Discrepancy</th>
                   <th className="px-6 py-3 text-left text-sm font-medium">Status</th>
                   <th className="px-6 py-3 text-right text-sm font-medium">Actions</th>
@@ -328,6 +467,27 @@ export default function AuditCollectionsPage({ vendos }: PageProps) {
                         </div>
                       ) : vendo.hasCurrentCollection ? (
                         <span className="text-orange-600 dark:text-orange-400 text-xs">Pending</span>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-sm">
+                      {vendo.confirmedAt ? (
+                        <div className="text-sm">
+                          <div className="font-medium">
+                            {new Date(vendo.confirmedAt).toLocaleDateString('en-US', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                            })}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {new Date(vendo.confirmedAt).toLocaleTimeString('en-US', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </div>
+                        </div>
                       ) : (
                         <span className="text-muted-foreground">-</span>
                       )}

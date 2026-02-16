@@ -5,6 +5,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\OptionsController;
 use App\Models\WifiVendo;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -26,11 +27,60 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('activity-logs', ActivityLogController::class)->only(['index', 'show'])->middleware('permission:view activity logs');
     
     Route::get('audit-collections', function () {
+        // Get query parameters
+        $search = request('search');
+        $status = request('status', 'all');
+        $confirmationDate = request('confirmation_date');
+        
+        // Get current month for status filtering
+        $currentMonth = now()->format('Y-m');
+        
         // Get all vendos for audit
-        $vendos = WifiVendo::all();
+        $query = WifiVendo::query();
+        
+        // Search by name
+        if ($search) {
+            $query->where('name', 'like', "%{$search}%");
+        }
+        
+        $vendos = $query->get();
+        
+        // Filter by status (server-side)
+        if ($status !== 'all') {
+            $vendos = $vendos->filter(function ($vendo) use ($status, $currentMonth) {
+                $monthData = $vendo->monthly_collections[$currentMonth] ?? null;
+                $hasCollection = false;
+                $isConfirmed = false;
+                
+                if ($monthData) {
+                    if (is_array($monthData)) {
+                        $hasCollection = isset($monthData['amount']) && $monthData['amount'] > 0;
+                        $isConfirmed = isset($monthData['confirmed_amount']);
+                    } else {
+                        $hasCollection = $monthData > 0;
+                    }
+                }
+                
+                // Filter by status
+                if ($status === 'confirmed') {
+                    return $isConfirmed;
+                } elseif ($status === 'pending') {
+                    return $hasCollection && !$isConfirmed;
+                } elseif ($status === 'not-collected') {
+                    return !$hasCollection;
+                }
+                
+                return true;
+            })->values();
+        }
         
         return Inertia::render('audit-collections/index', [
             'vendos' => $vendos,
+            'filters' => [
+                'search' => $search,
+                'status' => $status,
+                'confirmation_date' => $confirmationDate,
+            ],
         ]);
     })->name('audit-collections.index')->middleware('permission:view audit collections');
     

@@ -17,9 +17,10 @@ interface VendoDataTableProps {
     search?: string;
     status?: string;
   };
+  collectionDate?: string;
 }
 
-export function VendoDataTable({ vendos, filters }: VendoDataTableProps) {
+export function VendoDataTable({ vendos, filters, collectionDate }: VendoDataTableProps) {
   const { auth } = usePage<{ auth: Auth }>().props;
   const [selectedVendo, setSelectedVendo] = useState<WifiVendo | null>(null);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -84,10 +85,32 @@ export function VendoDataTable({ vendos, filters }: VendoDataTableProps) {
 
   const currentMonth = getCurrentMonth();
 
-  if (vendos.data.length === 0) {
+  // Filter vendos by collection date (client-side, uses browser timezone for correct display match)
+  const filteredVendos = collectionDate
+    ? vendos.data.filter((vendo) => {
+        const monthData = vendo.monthly_collections?.[currentMonth];
+        const collectedAt = typeof monthData === 'object' ? monthData?.collected_at : null;
+        if (!collectedAt) return false;
+        const d = new Date(collectedAt);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}` === collectionDate;
+      })
+    : vendos.data;
+
+  if (!collectionDate && vendos.data.length === 0) {
     return (
       <Card className="p-8 text-center">
         <p className="text-muted-foreground mb-4">No WiFi vendos yet. Create one to start monitoring.</p>
+      </Card>
+    );
+  }
+
+  if (collectionDate && filteredVendos.length === 0) {
+    return (
+      <Card className="p-8 text-center">
+        <p className="text-muted-foreground mb-4">No collections found for the selected date.</p>
       </Card>
     );
   }
@@ -104,16 +127,18 @@ export function VendoDataTable({ vendos, filters }: VendoDataTableProps) {
                 </th>
                 <th className="px-6 py-3 text-left text-sm font-medium">Remarks</th>
                 <th className="px-6 py-3 text-left text-sm font-medium">{getCurrentMonthLabel()}</th>
+                <th className="px-6 py-3 text-left text-sm font-medium">Collection Date</th>
                 <th className="px-6 py-3 text-left text-sm font-medium">Collection Remarks</th>
                 <th className="px-6 py-3 text-left text-sm font-medium">Status</th>
                 <th className="px-6 py-3 text-right text-sm font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {vendos.data.map((vendo) => {
+              {filteredVendos.map((vendo) => {
                 const monthData = vendo.monthly_collections?.[currentMonth];
                 const currentCollection = typeof monthData === 'object' ? monthData?.amount : monthData;
                 const collectionRemarks = typeof monthData === 'object' ? monthData?.remarks : null;
+                const collectedAt = typeof monthData === 'object' ? monthData?.collected_at : null;
                 const hasCollection = currentCollection && currentCollection > 0;
                 const isNew = isNewVendo(vendo);
 
@@ -125,6 +150,29 @@ export function VendoDataTable({ vendos, filters }: VendoDataTableProps) {
                     </td>
                     <td className="px-6 py-4 text-sm font-medium">
                       {hasCollection ? `₱${currentCollection.toLocaleString()}` : '-'}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-muted-foreground">
+                      {collectedAt ? (
+                        <div>
+                          <div className="font-medium text-foreground">
+                            {new Date(collectedAt).toLocaleDateString('en-US', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                            })}
+                          </div>
+                          <div className="text-xs">
+                            {new Date(collectedAt).toLocaleTimeString('en-US', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </div>
+                        </div>
+                      ) : hasCollection ? (
+                        <span className="text-xs text-muted-foreground">No date recorded</span>
+                      ) : (
+                        '-'
+                      )}
                     </td>
                     <td className="px-6 py-4 text-sm text-muted-foreground italic">
                       {collectionRemarks || '-'}
