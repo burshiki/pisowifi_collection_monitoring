@@ -1,0 +1,258 @@
+import { router, usePage } from '@inertiajs/react';
+import { Trash2, Edit, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { destroy } from '@/routes/wifi-vendos';
+import type { Auth } from '@/types/auth';
+import type { WifiVendo, PaginatedVendos } from '@/types/wifi-vendo';
+import { AddCollectionDialog } from './add-collection-dialog';
+import { UpdateVendoDialog } from './update-vendo-dialog';
+
+interface VendoDataTableProps {
+  vendos: PaginatedVendos;
+  filters?: {
+    search?: string;
+    status?: string;
+  };
+}
+
+export function VendoDataTable({ vendos, filters }: VendoDataTableProps) {
+  const { auth } = usePage<{ auth: Auth }>().props;
+  const [selectedVendo, setSelectedVendo] = useState<WifiVendo | null>(null);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isAddCollectionOpen, setIsAddCollectionOpen] = useState(false);
+
+  const canAddCollection = auth.permissions?.includes('add wifi vendo collections');
+  const canUpdate = auth.permissions?.includes('update wifi vendos');
+  const canDelete = auth.permissions?.includes('delete wifi vendos');
+
+  // Update selectedVendo when vendos data changes (after Inertia reload)
+  useEffect(() => {
+    if (selectedVendo) {
+      const updatedVendo = vendos.data.find(v => v.id === selectedVendo.id);
+      if (updatedVendo && JSON.stringify(updatedVendo) !== JSON.stringify(selectedVendo)) {
+        setSelectedVendo(updatedVendo);
+      }
+    }
+  }, [vendos, selectedVendo]);
+
+  const getCurrentMonth = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}`;
+  };
+
+  const getCurrentMonthLabel = () => {
+    const now = new Date();
+    return now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  };
+
+  const isNewVendo = (vendo: WifiVendo) => {
+    const createdDate = new Date(vendo.created_at);
+    const now = new Date();
+    return createdDate.getFullYear() === now.getFullYear() && 
+           createdDate.getMonth() === now.getMonth();
+  };
+
+  const handleDelete = (vendo: WifiVendo) => {
+    if (window.confirm(`Are you sure you want to delete "${vendo.name}"?`)) {
+      router.delete(destroy(vendo.id), {
+        preserveScroll: true,
+        onSuccess: () => {
+          toast.success('WiFi Vendo deleted successfully!');
+        },
+        onError: () => {
+          toast.error('Failed to delete WiFi Vendo');
+        },
+      });
+    }
+  };
+
+  const handleEdit = (vendo: WifiVendo) => {
+    setSelectedVendo(vendo);
+    setIsEditOpen(true);
+  };
+
+  const handleAddCollection = (vendo: WifiVendo) => {
+    setSelectedVendo(vendo);
+    setIsAddCollectionOpen(true);
+  };
+
+  const currentMonth = getCurrentMonth();
+
+  if (vendos.data.length === 0) {
+    return (
+      <Card className="p-8 text-center">
+        <p className="text-muted-foreground mb-4">No WiFi vendos yet. Create one to start monitoring.</p>
+      </Card>
+    );
+  }
+
+  return (
+    <>
+      <Card className="overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b bg-muted/50">
+                <th className="px-6 py-3 text-left text-sm font-medium">
+                  Vendo Name
+                </th>
+                <th className="px-6 py-3 text-left text-sm font-medium">Remarks</th>
+                <th className="px-6 py-3 text-left text-sm font-medium">{getCurrentMonthLabel()}</th>
+                <th className="px-6 py-3 text-left text-sm font-medium">Collection Remarks</th>
+                <th className="px-6 py-3 text-left text-sm font-medium">Status</th>
+                <th className="px-6 py-3 text-right text-sm font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {vendos.data.map((vendo) => {
+                const monthData = vendo.monthly_collections?.[currentMonth];
+                const currentCollection = typeof monthData === 'object' ? monthData?.amount : monthData;
+                const collectionRemarks = typeof monthData === 'object' ? monthData?.remarks : null;
+                const hasCollection = currentCollection && currentCollection > 0;
+                const isNew = isNewVendo(vendo);
+
+                return (
+                  <tr key={vendo.id} className="border-b hover:bg-muted/30 transition-colors">
+                    <td className="px-6 py-4 text-sm font-medium">{vendo.name}</td>
+                    <td className="px-6 py-4 text-sm text-muted-foreground">
+                      {vendo.remarks || '-'}
+                    </td>
+                    <td className="px-6 py-4 text-sm font-medium">
+                      {hasCollection ? `₱${currentCollection.toLocaleString()}` : '-'}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-muted-foreground italic">
+                      {collectionRemarks || '-'}
+                    </td>
+                    <td className="px-6 py-4">
+                      {hasCollection ? (
+                        <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
+                          Collected
+                        </Badge>
+                      ) : isNew ? (
+                        <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">
+                          New Vendo
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-red-100 text-red-800 hover:bg-red-100">
+                          Not Collected
+                        </Badge>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex justify-end gap-2">
+                        {canAddCollection && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleAddCollection(vendo)}
+                            className="text-green-600 hover:text-green-700"
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {canUpdate && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleEdit(vendo)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {canDelete && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDelete(vendo)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* Pagination Controls */}
+      {vendos.last_page > 1 && (
+        <div className="sticky bottom-0 bg-background border-t pt-4 pb-2">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">
+              Showing {vendos.from} to {vendos.to} of {vendos.total} vendos
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={vendos.current_page === 1}
+                onClick={() => router.get('/wifi-vendos', { page: vendos.current_page - 1, search: filters?.search, status: filters?.status }, { preserveScroll: true, preserveState: true })}
+                className="h-9 px-4"
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Previous
+              </Button>
+              
+              <div className="flex items-center gap-1">
+                {vendos.links.slice(1, -1).map((link, index) => {
+                  const isNumber = !isNaN(Number(link.label));
+                  if (!isNumber) return null;
+                  
+                  const pageNumber = Number(link.label);
+                  return (
+                    <Button
+                      key={index}
+                      variant={link.active ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => router.get('/wifi-vendos', { page: pageNumber, search: filters?.search, status: filters?.status }, { preserveScroll: true, preserveState: true })}
+                      className="h-9 w-9 p-0"
+                    >
+                      {link.label}
+                    </Button>
+                  );
+                })}
+              </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={vendos.current_page === vendos.last_page}
+                onClick={() => router.get('/wifi-vendos', { page: vendos.current_page + 1, search: filters?.search, status: filters?.status }, { preserveScroll: true, preserveState: true })}
+                className="h-9 px-4"
+              >
+                Next
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedVendo && (
+        <>
+          <UpdateVendoDialog
+            vendo={selectedVendo}
+            open={isEditOpen}
+            onOpenChange={setIsEditOpen}
+          />
+          <AddCollectionDialog
+            vendo={selectedVendo}
+            open={isAddCollectionOpen}
+            onOpenChange={setIsAddCollectionOpen}
+          />
+        </>
+      )}
+    </>
+  );
+}
