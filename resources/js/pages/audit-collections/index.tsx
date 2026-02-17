@@ -48,6 +48,7 @@ export default function AuditCollectionsPage({ vendos, filters }: PageProps) {
   const [confirmationDate, setConfirmationDate] = useState(filters.confirmation_date || '');
 
   const canConfirmCollection = auth.permissions?.includes('view audit collections');
+  const isAdmin = auth.roles?.includes('admin');
   
   // Debounced search and filter (only send search and status to server)
   useEffect(() => {
@@ -532,15 +533,19 @@ export default function AuditCollectionsPage({ vendos, filters }: PageProps) {
                           History
                         </Button>
                         {vendo.hasCurrentCollection && canConfirmCollection && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleConfirmCollection(vendo, currentMonth)}
-                            className="text-purple-600 hover:text-purple-700"
-                          >
-                            <CheckCircle2 className="h-4 w-4 mr-1" />
-                            {vendo.isConfirmed ? 'Re-confirm' : 'Confirm'}
-                          </Button>
+                          // Show confirm button for not-yet-confirmed collections (both audit and admin)
+                          // Show re-confirm button only for admin role
+                          (!vendo.isConfirmed || isAdmin) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleConfirmCollection(vendo, currentMonth)}
+                              className="text-purple-600 hover:text-purple-700"
+                            >
+                              <CheckCircle2 className="h-4 w-4 mr-1" />
+                              {vendo.isConfirmed ? 'Re-confirm' : 'Confirm'}
+                            </Button>
+                          )
                         )}
                       </div>
                     </td>
