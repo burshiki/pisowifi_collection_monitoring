@@ -1,6 +1,6 @@
 import { router, usePage } from '@inertiajs/react';
-import { Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Trash2, AlertTriangle } from 'lucide-react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -30,6 +30,8 @@ export function AddCollectionDialog({ vendo, open, onOpenChange }: AddCollection
   const [amount, setAmount] = useState('');
   const [remarks, setRemarks] = useState('');
   const [processing, setProcessing] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleteRemarks, setDeleteRemarks] = useState('');
 
   const canDeleteCollection = auth.permissions?.includes('delete wifi vendo collections');
 
@@ -51,12 +53,15 @@ export function AddCollectionDialog({ vendo, open, onOpenChange }: AddCollection
     return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   };
 
-  useEffect(() => {
-    if (open) {
+  const handleOpenChange = (newOpen: boolean) => {
+    if (!newOpen) {
       setAmount('');
       setRemarks('');
+      setDeleteTarget(null);
+      setDeleteRemarks('');
     }
-  }, [open]);
+    onOpenChange(newOpen);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,15 +123,16 @@ export function AddCollectionDialog({ vendo, open, onOpenChange }: AddCollection
     });
   };
 
-  const handleRemoveCollection = (monthKey: string) => {
-    if (!vendo) return;
+  const handleConfirmDelete = () => {
+    if (!vendo || !deleteTarget) return;
 
-    if (!window.confirm(`Are you sure you want to remove the collection for ${formatMonthLabel(monthKey)}?`)) {
+    if (!deleteRemarks.trim()) {
+      toast.error('Please provide a reason for deleting this collection.');
       return;
     }
 
     const updatedCollections = { ...vendo.monthly_collections };
-    delete updatedCollections[monthKey];
+    delete updatedCollections[deleteTarget];
 
     setProcessing(true);
     router.put(update(vendo.id).url, {
@@ -134,11 +140,15 @@ export function AddCollectionDialog({ vendo, open, onOpenChange }: AddCollection
       remarks: vendo.remarks,
       // @ts-expect-error - Inertia handles nested objects correctly despite type definition
       monthly_collections: updatedCollections,
+      deleted_month_key: deleteTarget,
+      deletion_remarks: deleteRemarks.trim(),
     }, {
       preserveScroll: true,
       preserveState: false,
       onSuccess: () => {
         toast.success('Collection removed successfully!');
+        setDeleteTarget(null);
+        setDeleteRemarks('');
         setProcessing(false);
       },
       onError: (errors) => {
@@ -153,7 +163,7 @@ export function AddCollectionDialog({ vendo, open, onOpenChange }: AddCollection
 
   const currentMonthKey = getCurrentMonthKey();
   const existingCollection = vendo.monthly_collections?.[currentMonthKey];
-  const hasCurrentMonthCollection = existingCollection && 
+  const hasCurrentMonthCollection = existingCollection &&
     (typeof existingCollection === 'object' ? existingCollection.amount > 0 : existingCollection > 0);
   const canAddCollection = !hasCurrentMonthCollection;
 
@@ -161,7 +171,7 @@ export function AddCollectionDialog({ vendo, open, onOpenChange }: AddCollection
     .sort(([a], [b]) => b.localeCompare(a));
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Manage Collections - {vendo.name}</DialogTitle>
@@ -185,13 +195,13 @@ export function AddCollectionDialog({ vendo, open, onOpenChange }: AddCollection
               }`}>
                 Add Collection for {getCurrentMonthLabel()}
               </h3>
-              
+
               {hasCurrentMonthCollection && (
                 <div className="mb-3 p-3 bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded text-sm text-yellow-800 dark:text-yellow-200">
                   Collection for this month already exists. If the amount is incorrect, {canDeleteCollection ? 'delete it below and add a new one' : 'request an admin to delete it first'}.
                 </div>
               )}
-              
+
               <div className="space-y-3">
                 <div className="space-y-2">
                   <Label htmlFor="amount">Collection Amount</Label>
@@ -237,9 +247,10 @@ export function AddCollectionDialog({ vendo, open, onOpenChange }: AddCollection
                     const collectionAmount = isObject ? collectionData.amount : collectionData;
                     const collectionRemarks = isObject ? collectionData.remarks : null;
                     const collectedAtDate = isObject ? collectionData.collected_at : null;
+                    const isDeleteTarget = deleteTarget === monthKey;
 
                     return (
-                      <Card key={monthKey} className="p-4">
+                      <Card key={monthKey} className={`p-4 ${isDeleteTarget ? 'border-red-300 dark:border-red-700' : ''}`}>
                         <div className="flex justify-between items-start gap-4">
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-1">
@@ -267,19 +278,65 @@ export function AddCollectionDialog({ vendo, open, onOpenChange }: AddCollection
                               </p>
                             )}
                           </div>
-                          {canDeleteCollection && (
+                          {canDeleteCollection && !isDeleteTarget && (
                             <Button
                               type="button"
                               variant="outline"
                               size="sm"
-                              onClick={() => handleRemoveCollection(monthKey)}
+                              onClick={() => setDeleteTarget(monthKey)}
                               disabled={processing}
-                              className="text-red-600 hover:text-red-700"
+                              className="text-red-600 hover:text-red-700 shrink-0"
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           )}
                         </div>
+
+                        {/* Inline delete confirmation with remarks */}
+                        {isDeleteTarget && (
+                          <div className="mt-3 pt-3 border-t border-red-200 dark:border-red-800 space-y-3">
+                            <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
+                              <AlertTriangle className="h-4 w-4 shrink-0" />
+                              <p className="text-sm font-medium">
+                                Provide a reason before deleting this collection.
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <Label htmlFor={`delete-remarks-${monthKey}`} className="text-sm">
+                                Reason for deletion <span className="text-red-500">*</span>
+                              </Label>
+                              <Textarea
+                                id={`delete-remarks-${monthKey}`}
+                                placeholder="Enter reason for deleting this collection..."
+                                value={deleteRemarks}
+                                onChange={(e) => setDeleteRemarks(e.target.value)}
+                                rows={2}
+                                disabled={processing}
+                                className="text-sm"
+                              />
+                            </div>
+                            <div className="flex gap-2 justify-end">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => { setDeleteTarget(null); setDeleteRemarks(''); }}
+                                disabled={processing}
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="destructive"
+                                size="sm"
+                                onClick={handleConfirmDelete}
+                                disabled={processing || !deleteRemarks.trim()}
+                              >
+                                {processing ? 'Deleting...' : 'Confirm Delete'}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
                       </Card>
                     );
                   })}
@@ -292,7 +349,7 @@ export function AddCollectionDialog({ vendo, open, onOpenChange }: AddCollection
             <Button
               type="button"
               variant="outline"
-              onClick={() => onOpenChange(false)}
+              onClick={() => handleOpenChange(false)}
               disabled={processing}
             >
               Close

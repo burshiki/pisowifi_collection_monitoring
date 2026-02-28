@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreWifiVendoRequest;
 use App\Http\Requests\UpdateWifiVendoRequest;
 use App\Models\WifiVendo;
+use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
@@ -110,7 +111,40 @@ class WifiVendoController extends Controller implements HasMiddleware
      */
     public function update(UpdateWifiVendoRequest $request, WifiVendo $wifiVendo): RedirectResponse
     {
+        $deletedMonthKey = $request->input('deleted_month_key');
+        $deletionRemarks = $request->input('deletion_remarks');
+
+        // Capture the collection data before it's deleted so we can log it
+        $deletedCollectionData = null;
+        if ($deletedMonthKey) {
+            $deletedCollectionData = $wifiVendo->monthly_collections[$deletedMonthKey] ?? null;
+        }
+
         $wifiVendo->update($request->validated());
+
+        // Log collection deletion with remarks
+        if ($deletedMonthKey && $deletedCollectionData !== null) {
+            $amount = is_array($deletedCollectionData)
+                ? ($deletedCollectionData['amount'] ?? 0)
+                : $deletedCollectionData;
+
+            $monthDate = Carbon::createFromFormat('Y-m', $deletedMonthKey);
+            $monthLabel = $monthDate->format('F Y');
+
+            $wifiVendo->logActivity(
+                'collection_deleted',
+                "Deleted collection for {$monthLabel} on vendo \"{$wifiVendo->name}\"",
+                [
+                    'vendo_name' => $wifiVendo->name,
+                    'month_key' => $deletedMonthKey,
+                    'month_label' => $monthLabel,
+                    'amount' => $amount,
+                    'collection_data' => $deletedCollectionData,
+                    'deletion_remarks' => $deletionRemarks,
+                ],
+                'collection_deletion'
+            );
+        }
 
         // Check if request came from audit collections page
         $referer = $request->header('referer');

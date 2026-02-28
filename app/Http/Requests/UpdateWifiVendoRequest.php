@@ -26,6 +26,8 @@ class UpdateWifiVendoRequest extends FormRequest
             'name' => ['required', 'string', 'max:255', Rule::unique('wifi_vendos')->ignore($this->wifi_vendo)],
             'remarks' => ['nullable', 'string', 'max:500'],
             'monthly_collections' => ['nullable', 'array'],
+            'deleted_month_key' => ['nullable', 'string'],
+            'deletion_remarks' => ['nullable', 'string', 'max:1000'],
         ];
     }
 
