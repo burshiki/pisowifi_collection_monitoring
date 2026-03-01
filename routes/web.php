@@ -32,9 +32,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         $status = request('status', 'all');
         $confirmationDate = request('confirmation_date');
         
-        // Get current month for status filtering
-        $currentMonth = now()->format('Y-m');
-        
         // Get all vendos for audit
         $query = WifiVendo::query();
         
@@ -46,31 +43,36 @@ Route::middleware(['auth', 'verified'])->group(function () {
         $vendos = $query->get();
         
         // Filter by status (server-side)
+        // Check the latest collection month per vendo, not just the current month,
+        // so unconfirmed collections from previous months still show as pending.
         if ($status !== 'all') {
-            $vendos = $vendos->filter(function ($vendo) use ($status, $currentMonth) {
+            $vendos = $vendos->filter(function ($vendo) use ($status) {
                 $collections = $vendo->monthly_collections ?? [];
-                $monthData = $collections[$currentMonth] ?? null;
+
+                // Find latest month with an unconfirmed collection
                 $hasCollection = false;
                 $isConfirmed = false;
+                $months = array_keys($collections);
+                rsort($months);
 
-                if ($monthData) {
-                    if (is_array($monthData)) {
-                        $hasCollection = isset($monthData['amount']) && $monthData['amount'] > 0;
-                        $isConfirmed = isset($monthData['confirmed_amount']);
-                    } else {
-                        $hasCollection = $monthData > 0;
+                foreach ($months as $month) {
+                    $data = $collections[$month];
+                    $amt = is_array($data) ? ($data['amount'] ?? 0) : ($data ?? 0);
+                    if ($amt > 0) {
+                        $hasCollection = true;
+                        $isConfirmed = is_array($data) && isset($data['confirmed_amount']);
+                        break; // use the latest month with a collection
                     }
                 }
-                
-                // Filter by status
+
                 if ($status === 'confirmed') {
-                    return $isConfirmed;
+                    return $hasCollection && $isConfirmed;
                 } elseif ($status === 'pending') {
                     return $hasCollection && !$isConfirmed;
                 } elseif ($status === 'not-collected') {
                     return !$hasCollection;
                 }
-                
+
                 return true;
             })->values();
         }

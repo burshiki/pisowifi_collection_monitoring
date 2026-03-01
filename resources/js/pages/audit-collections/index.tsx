@@ -105,9 +105,23 @@ export default function AuditCollectionsPage({ vendos, filters }: PageProps) {
     setIsHistoryOpen(true);
   };
 
+  // Find the latest month with a collection for a vendo
+  const getLatestCollectionMonth = (vendo: WifiVendo): string | null => {
+    const collections = vendo.monthly_collections || {};
+    const months = Object.keys(collections).sort().reverse();
+    for (const month of months) {
+      const data = collections[month];
+      const amount = typeof data === 'object' ? data?.amount : data;
+      if (amount && amount > 0) return month;
+    }
+    return null;
+  };
+
   // Get all vendos with their collection data
   const vendoCollections = vendos.map((vendo) => {
-    const monthData = vendo.monthly_collections?.[currentMonth];
+    // Use the latest month with a collection, not just the current calendar month
+    const auditMonthKey = getLatestCollectionMonth(vendo) ?? currentMonth;
+    const monthData = vendo.monthly_collections?.[auditMonthKey];
     const currentCollection = typeof monthData === 'object' ? monthData?.amount : monthData;
     const collectionRemarks = typeof monthData === 'object' ? monthData?.remarks : null;
     const collectedAt = typeof monthData === 'object' ? monthData?.collected_at : null;
@@ -115,7 +129,7 @@ export default function AuditCollectionsPage({ vendos, filters }: PageProps) {
     const confirmedAt = typeof monthData === 'object' ? monthData?.confirmed_at : null;
     const discrepancy = typeof monthData === 'object' ? monthData?.discrepancy : null;
     const isConfirmed = confirmedAmount !== null && confirmedAmount !== undefined;
-    
+
     // Get all historical collections
     const allCollections = Object.entries(vendo.monthly_collections || {})
       .map(([monthKey, data]) => ({
@@ -129,6 +143,7 @@ export default function AuditCollectionsPage({ vendos, filters }: PageProps) {
 
     return {
       ...vendo,
+      auditMonthKey,
       currentCollection,
       collectionRemarks,
       collectedAt,
@@ -540,7 +555,7 @@ export default function AuditCollectionsPage({ vendos, filters }: PageProps) {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleConfirmCollection(vendo, currentMonth)}
+                              onClick={() => handleConfirmCollection(vendo, vendo.auditMonthKey)}
                               className="text-purple-600 hover:text-purple-700"
                             >
                               <CheckCircle2 className="h-4 w-4 mr-1" />
