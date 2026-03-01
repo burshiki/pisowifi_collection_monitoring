@@ -48,10 +48,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         // Filter by status (server-side)
         if ($status !== 'all') {
             $vendos = $vendos->filter(function ($vendo) use ($status, $currentMonth) {
-                $monthData = $vendo->monthly_collections[$currentMonth] ?? null;
+                $collections = $vendo->monthly_collections ?? [];
+                $monthData = $collections[$currentMonth] ?? null;
                 $hasCollection = false;
                 $isConfirmed = false;
-                
+
                 if ($monthData) {
                     if (is_array($monthData)) {
                         $hasCollection = isset($monthData['amount']) && $monthData['amount'] > 0;

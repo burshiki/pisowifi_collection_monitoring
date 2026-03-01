@@ -52,6 +52,7 @@ export default function AuditCollectionsPage({ vendos, filters }: PageProps) {
   
   // Debounced search and filter (only send search and status to server)
   useEffect(() => {
+    setCurrentPage(1);
     const timer = setTimeout(() => {
       router.get(
         '/audit-collections',
